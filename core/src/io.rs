@@ -242,7 +242,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 
 				let call_method = |method: &Arc<(dyn RpcMethod<T> + 'static)>| {
 					let method = method.clone();
-					method.call(params, meta)
+					future::lazy(move |_| method.call(params, meta)).flatten()
 				};
 
 				let result = match (valid_version, self.methods.get(&method.method)) {
