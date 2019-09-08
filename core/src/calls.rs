@@ -1,8 +1,9 @@
-use crate::types::{Error, Params, Value};
-use crate::BoxFuture;
-use futures::{Future, IntoFuture};
 use std::fmt;
+use std::future::Future;
 use std::sync::Arc;
+
+use crate::types::{Params, Value};
+use crate::{BoxFuture, Result};
 
 /// Metadata trait
 pub trait Metadata: Clone + Send + 'static {}
@@ -14,7 +15,7 @@ impl<T: Sync + Send + 'static> Metadata for Arc<T> {}
 /// Asynchronous Method
 pub trait RpcMethodSimple: Send + Sync + 'static {
 	/// Output future
-	type Out: Future<Item = Value, Error = Error> + Send;
+	type Out: Future<Output = Result<Value>> + Send + Unpin;
 	/// Call method
 	fn call(&self, params: Params) -> Self::Out;
 }
@@ -59,15 +60,14 @@ impl<T: Metadata> fmt::Debug for RemoteProcedure<T> {
 	}
 }
 
-impl<F: Send + Sync + 'static, X: Send + 'static, I> RpcMethodSimple for F
+impl<F: Send + Sync + 'static, T: Send> RpcMethodSimple for F
 where
-	F: Fn(Params) -> I,
-	X: Future<Item = Value, Error = Error>,
-	I: IntoFuture<Item = Value, Error = Error, Future = X>,
+	F: Fn(Params) -> T,
+	T: Future<Output = Result<Value>> + Unpin,
 {
-	type Out = X;
+	type Out = T;
 	fn call(&self, params: Params) -> Self::Out {
-		self(params).into_future()
+		self(params)
 	}
 }
 
@@ -80,24 +80,23 @@ where
 	}
 }
 
-impl<F: Send + Sync + 'static, X: Send + 'static, T, I> RpcMethod<T> for F
+impl<F: Send + Sync + 'static, T: Send, M> RpcMethod<M> for F
 where
-	T: Metadata,
-	F: Fn(Params, T) -> I,
-	I: IntoFuture<Item = Value, Error = Error, Future = X>,
-	X: Future<Item = Value, Error = Error>,
+	M: Metadata,
+	F: Fn(Params, M) -> T,
+	T: Future<Output = Result<Value>> + Unpin + 'static,
 {
-	fn call(&self, params: Params, meta: T) -> BoxFuture<Value> {
-		Box::new(self(params, meta).into_future())
+	fn call(&self, params: Params, meta: M) -> BoxFuture<Value> {
+		Box::new(self(params, meta))
 	}
 }
 
-impl<F: Send + Sync + 'static, T> RpcNotification<T> for F
+impl<F: Send + Sync + 'static, M> RpcNotification<M> for F
 where
-	T: Metadata,
-	F: Fn(Params, T),
+	M: Metadata,
+	F: Fn(Params, M),
 {
-	fn execute(&self, params: Params, meta: T) {
+	fn execute(&self, params: Params, meta: M) {
 		self(params, meta)
 	}
 }

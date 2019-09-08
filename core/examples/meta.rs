@@ -1,4 +1,4 @@
-use jsonrpc_core::futures::Future;
+use jsonrpc_core::futures::{executor, future};
 use jsonrpc_core::*;
 
 #[derive(Clone, Default)]
@@ -9,7 +9,7 @@ pub fn main() {
 	let mut io = MetaIoHandler::default();
 
 	io.add_method_with_meta("say_hello", |_params: Params, meta: Meta| {
-		Ok(Value::String(format!("Hello World: {}", meta.0)))
+		future::ok(Value::String(format!("Hello World: {}", meta.0)))
 	});
 
 	let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
@@ -17,7 +17,7 @@ pub fn main() {
 
 	let headers = 5;
 	assert_eq!(
-		io.handle_request(request, Meta(headers)).wait().unwrap(),
+		executor::block_on(io.handle_request(request, Meta(headers))),
 		Some(response.to_owned())
 	);
 }

@@ -1,3 +1,4 @@
+use jsonrpc_core::futures::future;
 use jsonrpc_core::*;
 use serde_derive::Deserialize;
 
@@ -11,7 +12,7 @@ fn main() {
 
 	io.add_method("say_hello", |params: Params| {
 		let parsed: HelloParams = params.parse().unwrap();
-		Ok(Value::String(format!("hello, {}", parsed.name)))
+		future::ok(Value::String(format!("hello, {}", parsed.name)))
 	});
 
 	let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": { "name": "world" }, "id": 1}"#;

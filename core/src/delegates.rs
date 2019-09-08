@@ -1,30 +1,29 @@
 //! Delegate rpc calls
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::sync::Arc;
 
 use crate::calls::{Metadata, RemoteProcedure, RpcMethod, RpcNotification};
-use crate::types::{Error, Params, Value};
-use crate::BoxFuture;
-use futures::IntoFuture;
+use crate::types::{Params, Value};
+use crate::{BoxFuture, Result};
 
 struct DelegateAsyncMethod<T, F> {
 	delegate: Arc<T>,
 	closure: F,
 }
 
-impl<T, M, F, I> RpcMethod<M> for DelegateAsyncMethod<T, F>
+impl<T, M, F, O> RpcMethod<M> for DelegateAsyncMethod<T, F>
 where
 	M: Metadata,
-	F: Fn(&T, Params) -> I,
-	I: IntoFuture<Item = Value, Error = Error>,
+	F: Fn(&T, Params) -> O,
+	O: Future<Output = Result<Value>> + Send + Unpin + 'static,
 	T: Send + Sync + 'static,
 	F: Send + Sync + 'static,
-	I::Future: Send + 'static,
 {
 	fn call(&self, params: Params, _meta: M) -> BoxFuture<Value> {
 		let closure = &self.closure;
-		Box::new(closure(&self.delegate, params).into_future())
+		Box::new(closure(&self.delegate, params))
 	}
 }
 
@@ -33,18 +32,17 @@ struct DelegateMethodWithMeta<T, F> {
 	closure: F,
 }
 
-impl<T, M, F, I> RpcMethod<M> for DelegateMethodWithMeta<T, F>
+impl<T, M, F, O> RpcMethod<M> for DelegateMethodWithMeta<T, F>
 where
 	M: Metadata,
-	F: Fn(&T, Params, M) -> I,
-	I: IntoFuture<Item = Value, Error = Error>,
+	F: Fn(&T, Params, M) -> O,
+	O: Future<Output = Result<Value>> + Send + Unpin + 'static,
 	T: Send + Sync + 'static,
 	F: Send + Sync + 'static,
-	I::Future: Send + 'static,
 {
 	fn call(&self, params: Params, meta: M) -> BoxFuture<Value> {
 		let closure = &self.closure;
-		Box::new(closure(&self.delegate, params, meta).into_future())
+		Box::new(closure(&self.delegate, params, meta))
 	}
 }
 
@@ -114,12 +112,11 @@ where
 	}
 
 	/// Adds async method to the delegate.
-	pub fn add_method<F, I>(&mut self, name: &str, method: F)
+	pub fn add_method<F, O>(&mut self, name: &str, method: F)
 	where
-		F: Fn(&T, Params) -> I,
-		I: IntoFuture<Item = Value, Error = Error>,
+		F: Fn(&T, Params) -> O,
 		F: Send + Sync + 'static,
-		I::Future: Send + 'static,
+		O: Future<Output = Result<Value>> + Send + Unpin + 'static,
 	{
 		self.methods.insert(
 			name.into(),
@@ -131,12 +128,11 @@ where
 	}
 
 	/// Adds async method with metadata to the delegate.
-	pub fn add_method_with_meta<F, I>(&mut self, name: &str, method: F)
+	pub fn add_method_with_meta<F, O>(&mut self, name: &str, method: F)
 	where
-		F: Fn(&T, Params, M) -> I,
-		I: IntoFuture<Item = Value, Error = Error>,
+		F: Fn(&T, Params, M) -> O,
 		F: Send + Sync + 'static,
-		I::Future: Send + 'static,
+		O: Future<Output = Result<Value>> + Send + Unpin + 'static,
 	{
 		self.methods.insert(
 			name.into(),
